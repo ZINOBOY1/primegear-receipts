@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Receipt <%= invoice.invoice_no %></title>
+<style>
+body { font-family: Arial, sans-serif; margin:20px; color:#222; }
+body::before {
+    content:"";
+    position:fixed;
+    top:-50%;
+    left:-50%;
+    width:200%;
+    height:200%;
+    background-image: url("data:image/jpeg;base64,<%= logoDataUri %>");
+    background-repeat: repeat;
+    background-size:180px;
+    opacity:0.05;
+    transform:rotate(-45deg);
+    z-index:-1;
+}
+header{text-align:center;margin-bottom:20px;}
+header img{height:80px;}
+h1{margin:5px 0;font-size:22px;color:#444;}
+table{width:100%;border-collapse:collapse;margin-bottom:15px;}
+th,td{border:1px solid #ddd;padding:8px;font-size:14px;vertical-align:top;}
+th{background:#f4f4f4;text-align:left;}
+.right{text-align:right;}
+.no-border td{border:none;}
+.footer{margin-top:30px;font-size:12px;text-align:center;color:#555;}
+.notes{margin-top:15px;font-size:12px;}
+.signature {
+  margin-top: 100px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.signature div {
+  width: 45%;
+  text-align: center;
+  border-top: 1px solid #000;
+  padding-top: 5px; /* space between line and text */
+  position: relative;
+}
+
+.signature img {
+  position: absolute;
+  top: -50px; /* move signature above the line */
+  left: 50%;
+  transform: translateX(-50%);
+  height: 50px;
+}
+</style>
+</head>
+<body>
+<header>
+  <img src="data:image/jpeg;base64,<%= logoDataUri %>" alt="Logo">
+  <h1>Prime Gear Receipt</h1>
+</header>
+
+<table class="no-border">
+<tr><td><strong>Invoice No:</strong> <%= invoice.invoice_no %></td><td class="right"><strong>Date:</strong> <%= new Date(invoice.created_at).toLocaleDateString() %></td></tr>
+<tr><td><strong>Customer:</strong> <%= invoice.customer_name %></td><td class="right"><strong>Phone:</strong> <%= invoice.customer_phone %></td></tr>
+<tr><td colspan="2"><strong>Prepared by:</strong> ZINO</td></tr>
+</table>
+
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Item</th>
+<th>Storage</th>
+<th>IMEI</th>
+<th class="right">Qty</th>
+<th class="right">Unit Price</th>
+<th class="right">Total</th>
+</tr>
+</thead>
+<tbody>
+<% invoice.items.forEach((item,i)=>{ %>
+<tr>
+<td><%= i+1 %></td>
+<td>
+  <% if(item.swap_old){ %>
+    <strong>Swap:</strong> Old: <%= item.swap_old.name %> → New: <%= item.name %>
+  <% } else { %>
+    <%= item.name %>
+  <% } %>
+</td>
+<td>
+  <% if(item.swap_old){ %>
+    Old: <%= item.swap_old.storage %> → New: <%= item.storage %>
+  <% } else { %>
+    <%= item.storage %>
+  <% } %>
+</td>
+<td>
+  <% if(item.swap_old){ %>
+    Old: <%= item.swap_old.imei %> → New: <%= item.imei %>
+  <% } else { %>
+    <%= item.imei %>
+  <% } %>
+</td>
+<td class="right"><%= item.qty %></td>
+<td class="right">₦<%= item.unit_price.toLocaleString() %></td>
+<td class="right">₦<%= (item.qty*item.unit_price).toLocaleString() %></td>
+</tr>
+<% }) %>
+</tbody>
+</table>
+
+<table class="no-border">
+<tr><td><strong>Subtotal:</strong></td><td class="right">₦<%= invoice.subtotal.toLocaleString() %></td></tr>
+<tr><td><strong>Total:</strong></td><td class="right">₦<%= (invoice.unpaid_amount > 0 ? invoice.paid_amount : invoice.total).toLocaleString() %></td></tr>
+<tr><td><strong>Paid Amount:</strong></td><td class="right">₦<%= invoice.paid_amount.toLocaleString() %></td></tr>
+<tr><td><strong>Unpaid Amount:</strong></td><td class="right">₦<%= invoice.unpaid_amount.toLocaleString() %></td></tr>
+<tr><td><strong>Payment Method:</strong></td><td class="right"><%= invoice.payment_method %></td></tr>
+<tr><td><strong>Amount in words:</strong></td><td class="right"><%= invoice.amount_in_words %></td></tr>
+</table>
+
+<div class="signature">
+  <div>
+    
+    Customer Signature
+  </div>
+  <div>
+    <img src="data:image/png;base64,<%= signatureDataUri %>" alt="Prepared By Signature">
+    Prepared By (ZINO)
+  </div>
+</div>
+
+
+<div class="notes">
+  <strong>Terms & Conditions:</strong>
+  <p class="small">
+    • Brand new devices carry manufacturer warranty.<br>
+    • UK-used devices: 14-day limited warranty.<br>
+    • Warranty does not cover physical or liquid damage.<br>
+    • Keep your invoice safe — it is required for warranty claims.
+  </p>
+</div>
+
+<div class="footer">Thank you for shopping with Prime Gear!</div>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Create Receipt - Prime Gear</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+body { background:#f8f9fa; padding:30px; }
+.card { border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.1); }
+th, td { text-align:center; }
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+.total-box { background:#e9ecef; padding:10px; border-radius:6px; font-weight:bold; text-align:right; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="card p-4">
+    <h2 class="mb-3 text-center">Create Receipt</h2>
+    <form id="receiptForm" novalidate>
+      <div class="mb-3">
+        <label>Customer Name</label>
+        <input type="text" name="customer_name" class="form-control" required pattern="[A-Za-z\s]+" title="Letters only">
+      </div>
+      <div class="mb-3">
+        <label>Customer Phone</label>
+        <input type="text" name="customer_phone" class="form-control" pattern="[0-9\s]+" title="Numbers only">
+      </div>
+
+      <h4>Items</h4>
+      <table class="table table-bordered" id="itemsTable">
+        <thead class="table-light">
+          <tr><th>Name</th><th>Qty</th><th>Unit Price</th><th>Total</th><th>Remove</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <button type="button" class="btn btn-primary mb-3" onclick="addItem()">Add Item</button>
+
+      <div class="total-box mb-3">Subtotal: ₦<span id="subtotal">0</span></div>
+      <div class="total-box mb-3">Total: ₦<span id="total">0</span></div>
+
+      <div class="mb-3">
+        <label>Paid Amount</label>
+        <input type="number" id="paidAmount" name="paid_amount" class="form-control" value="0" min="0">
+      </div>
+      <div class="total-box mb-3">Unpaid Amount: ₦<span id="unpaidAmount">0</span></div>
+
+      <div class="mb-3">
+        <label>Payment Method</label>
+        <select id="paymentMethod" name="payment_method" class="form-select">
+          <option value="Cash">Cash</option>
+          <option value="Transfer">Transfer</option>
+        </select>
+      </div>
+
+      <button type="submit" class="btn btn-success w-100">Save & Generate PDF</button>
+    </form>
+  </div>
+</div>
+
+<script>
+function addItem() {
+  const tbody = document.querySelector("#itemsTable tbody");
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input type="text" class="form-control" placeholder="Item name" required></td>
+    <td><input type="number" class="form-control qty" value="1" min="0"></td>
+    <td><input type="number" class="form-control unit_price" value="0" min="0"></td>
+    <td class="rowTotal">0</td>
+    <td><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button></td>
+  `;
+  tbody.appendChild(tr);
+  tr.querySelectorAll("input").forEach(i => i.addEventListener("input", calculateTotals));
+  calculateTotals();
+}
+
+function removeRow(btn) { btn.closest("tr").remove(); calculateTotals(); }
+
+function calculateTotals() {
+  let subtotal = 0;
+  document.querySelectorAll("#itemsTable tbody tr").forEach(row=>{
+    const qty = Number(row.querySelector(".qty").value || 0);
+    const price = Number(row.querySelector(".unit_price").value || 0);
+    const total = qty * price;
+    row.querySelector(".rowTotal").innerText = total.toLocaleString();
+    subtotal += total;
+  });
+  document.getElementById("subtotal").innerText = subtotal.toLocaleString();
+  document.getElementById("total").innerText = subtotal.toLocaleString();
+  const paid = Number(document.getElementById("paidAmount").value || 0);
+  document.getElementById("unpaidAmount").innerText = (subtotal - paid).toLocaleString();
+}
+
+document.getElementById("paidAmount").addEventListener("input", calculateTotals);
+
+document.getElementById("receiptForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  if(!e.target.checkValidity()) { e.target.reportValidity(); return; }
+
+  const items = Array.from(document.querySelectorAll("#itemsTable tbody tr")).map(row=>({
+    name: row.querySelector("td:nth-child(1) input").value,
+    qty: Number(row.querySelector("td:nth-child(2) input").value || 0),
+    unit_price: Number(row.querySelector("td:nth-child(3) input").value || 0)
+  }));
+
+  const subtotal = items.reduce((a,i)=>a+i.qty*i.unit_price,0);
+  const paid_amount = Number(document.getElementById("paidAmount").value || 0);
+  const unpaid_amount = subtotal - paid_amount;
+
+  const data = {
+    customer_name: e.target.customer_name.value,
+    customer_phone: e.target.customer_phone.value,
+    items, paid_amount, unpaid_amount,
+    payment_method: e.target.payment_method.value,
+    invoice_no: "INV"+Date.now()
+  };
+
+  const res = await fetch("/api/receipts", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(data)
+  });
+  const json = await res.json();
+  if(json.success){ alert("Saved! Generating PDF..."); window.open(`/receipt/${json.invoice_no}`,"_blank"); }
+  else alert("Error: "+json.error);
+});
+
+addItem();
+</script>
+</body>
+</html>
