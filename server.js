@@ -1,14 +1,14 @@
 import express from "express";
 import ejs from "ejs";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";        // ✅ use puppeteer-core
+import chromium from "@sparticuz/chromium";    // ✅ serverless chromium
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import pkg from 'number-to-words';
+import pkg from "number-to-words";
 
 const { toWords } = pkg;
-
 dotenv.config();
 
 const app = express();
@@ -34,22 +34,27 @@ app.post("/api/receipts", async (req, res) => {
     const subtotal = itemsParsed.reduce((sum, i) => sum + i.qty * i.unit_price, 0);
     const total = subtotal;
 
-    // Amount in words (for paid only if unpaid exists)
+    // Amount in words
     const total_for_words = unpaid_amount > 0 ? paid_amount : total;
-    const amount_in_words = toWords(total_for_words).charAt(0).toUpperCase() + toWords(total_for_words).slice(1) + " naira only";
+    const amount_in_words =
+      toWords(total_for_words).charAt(0).toUpperCase() +
+      toWords(total_for_words).slice(1) +
+      " naira only";
 
-    const { data, error } = await supabase.from("receipts").insert([{
-      customer_name,
-      customer_phone,
-      items: itemsParsed,
-      subtotal,
-      total,
-      paid_amount,
-      unpaid_amount,
-      payment_method,
-      invoice_no,
-      amount_in_words
-    }]).select().single();
+    const { data, error } = await supabase.from("receipts").insert([
+      {
+        customer_name,
+        customer_phone,
+        items: itemsParsed,
+        subtotal,
+        total,
+        paid_amount,
+        unpaid_amount,
+        payment_method,
+        invoice_no,
+        amount_in_words,
+      },
+    ]).select().single();
 
     if (error) return res.json({ success: false, error: error.message });
     res.json({ success: true, invoice_no: data.invoice_no });
@@ -61,31 +66,58 @@ app.post("/api/receipts", async (req, res) => {
 
 app.get("/receipt/:invoice_no", async (req, res) => {
   try {
-    const { data: invoice, error } = await supabase.from("receipts").select("*").eq("invoice_no", req.params.invoice_no).single();
+    const { data: invoice, error } = await supabase
+      .from("receipts")
+      .select("*")
+      .eq("invoice_no", req.params.invoice_no)
+      .single();
+
     if (error || !invoice) return res.status(404).send("Invoice not found");
 
+    // ✅ Embed logo + signature as base64
     const logoPath = path.join(process.cwd(), "public/logo.jpg");
-    const logoDataUri = fs.readFileSync(logoPath).toString("base64");
+    const logoDataUri = `data:image/jpeg;base64,${fs.readFileSync(logoPath).toString("base64")}`;
 
-    const signaturePath = path.join(process.cwd(), "public/signature.png"); // make sure this exists
-    const signatureDataUri = fs.readFileSync(signaturePath).toString("base64");
+    const signaturePath = path.join(process.cwd(), "public/signature.png");
+    const signatureDataUri = `data:image/png;base64,${fs.readFileSync(signaturePath).toString("base64")}`;
 
+    const html = await ejs.renderFile("views/receipt.ejs", {
+      invoice,
+      logoDataUri,
+      signatureDataUri,
+    });
 
-    const html = await ejs.renderFile("views/receipt.ejs", { invoice, logoDataUri , signatureDataUri});
+    // ✅ Launch Puppeteer with serverless Chromium
+    const browser = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+    });
 
-    const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
-    const pdfBuffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "20mm", right: "15mm", bottom: "20mm", left: "15mm" } });
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "20mm", right: "15mm", bottom: "20mm", left: "15mm" },
+    });
+
     await browser.close();
 
-    res.set({ "Content-Type": "application/pdf", "Content-Disposition": `inline; filename=receipt-${invoice.invoice_no}.pdf` });
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename=receipt-${invoice.invoice_no}.pdf`,
+    });
     res.send(pdfBuffer);
   } catch (err) {
-    console.error(err);
+    console.error("❌ PDF generation failed:", err);
     res.status(500).send("Error generating PDF");
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+app.listen(PORT, () =>
+  console.log(`🚀 Server running on http://localhost:${PORT}`)
+);
